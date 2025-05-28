@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grammar Checker</title>
+  <style>
+    :root {
+      --primary-color: #3498db;
+      --primary-dark: #2980b9;
+      --success-color: #27ae60;
+      --error-color: #e74c3c;
+      --bg-color: #ffffff;
+      --text-color: #333333;
+      --border-color: #dddddd;
+      --card-bg: #f9f9f9;
+      --highlight-color: #c8e6c9;
+    }
+    
+    .dark-mode {
+      --primary-color: #4db6ff;
+      --primary-dark: #3498db;
+      --success-color: #2ecc71;
+      --error-color: #ff6b6b;
+      --bg-color: #222831;
+      --text-color: #eeeeee;
+      --border-color: #555555;
+      --card-bg: #393e46;
+      --highlight-color: #76d275;
+    }
+    
+    * {
+      box-sizing: border-box;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+      color: var(--text-color);
+      background-color: var(--bg-color);
+    }
+    
+    h1, h2, h3 {
+      color: var(--text-color);
+    }
+    
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+      border-bottom: 2px solid var(--border-color);
+      padding-bottom: 10px;
+    }
+    
+    .container {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+    
+    @media (min-width: 768px) {
+      .container {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+    
+    .input-section, .output-section {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    
+    textarea {
+      width: 100%;
+      padding: 15px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 16px;
+      min-height: 200px;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      resize: vertical;
+    }
+    
+    textarea:focus {
+      border-color: var(--primary-color);
+      outline: none;
+      box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+    }
+    
+    .text-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      color: var(--text-color);
+      opacity: 0.8;
+    }
+    
+    button {
+      background-color: var(--primary-color);
+      color: white;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    
+    button:hover {
+      background-color: var(--primary-dark);
+    }
+    
+    button:disabled {
+      background-color: #95a5a6;
+      cursor: not-allowed;
+    }
+    
+    button svg {
+      width: 16px;
+      height: 16px;
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    
+    .button-secondary {
+      background-color: transparent;
+      border: 1px solid var(--primary-color);
+      color: var(--primary-color);
+    }
+    
+    .button-secondary:hover {
+      background-color: rgba(52, 152, 219, 0.1);
+    }
+    
+    .output-text {
+      margin-top: 15px;
+      padding: 15px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      min-height: 200px;
+      background-color: var(--card-bg);
+      position: relative;
+    }
+    
+    .error {
+      color: var(--error-color);
+      font-weight: bold;
+    }
+    
+    .success {
+      color: var(--success-color);
+    }
+    
+    .status {
+      margin-top: 10px;
+      font-style: italic;
+    }
+    
+    .loader {
+      border: 3px solid var(--border-color);
+      border-top: 3px solid var(--primary-color);
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .hidden {
+      display: none;
+    }
+    
+    .examples {
+      margin: 20px 0;
+      padding: 15px;
+      background-color: var(--card-bg);
+      border-radius: 8px;
+      border-left: 4px solid var(--primary-color);
+    }
+    
+    .examples h3 {
+      margin-top: 0;
+      color: var(--text-color);
+    }
+    
+    .example-item {
+      margin-bottom: 10px;
+      cursor: pointer;
+      color: var(--primary-color);
+      text-decoration: underline;
+      display: inline-block;
+      margin-right: 20px;
+    }
+    
+    .diff-highlight {
+      background-color: var(--highlight-color);
+      padding: 0 3px;
+      border-radius: 3px;
+    }
+    
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 8px;
+      cursor: pointer;
+      font-size: 12px;
+      opacity: 0.7;
+    }
+    
+    .copy-btn:hover {
+      opacity: 1;
+    }
+    
+    .theme-toggle {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background-color: transparent;
+      border: none;
+      cursor: pointer;
+      color: var(--text-color);
+      font-size: 24px;
+      padding: 0;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      z-index: 100;
+    }
+    
+    .theme-toggle:hover {
+      background-color: rgba(0, 0, 0, 0.1);
+    }
+    
+    .card {
+      background-color: var(--card-bg);
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      margin-bottom: 15px;
+    }
+    
+    .history-item {
+      margin-bottom: 15px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 15px;
+    }
+    
+    .history-item:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    
+    .history-original {
+      color: var(--error-color);
+      margin-bottom: 5px;
+    }
+    
+    .history-corrected {
+      color: var(--success-color);
+    }
+    
+    .history-controls {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    
+    .history-controls button {
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    
+    .tabs {
+      display: flex;
+      margin-bottom: 15px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .tab {
+      padding: 10px 15px;
+      cursor: pointer;
+      position: relative;
+      color: var(--text-color);
+      opacity: 0.7;
+    }
+    
+    .tab.active {
+      opacity: 1;
+    }
+    
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background-color: var(--primary-color);
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    .footer {
+      text-align: center;
+      margin-top: 50px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-color);
+      font-size: 14px;
+      color: var(--text-color);
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <button class="theme-toggle" id="themeToggle" title="Toggle dark/light mode">
+    🌙
+  </button>
+
+  <h1>Enhanced Grammar Checker</h1>
+  
+  <div class="tabs">
+    <div class="tab active" data-tab="check">Grammar Check</div>
+    <div class="tab" data-tab="history">Correction History</div>
+  </div>
+  
+  <div class="tab-content active" id="checkTab">
+    <div class="container">
+      <div class="input-section">
+        <div class="examples">
+          <h3>Example Sentences with Errors</h3>
+          <div class="example-item" onclick="loadExample(this)">She don't like ice cream.</div>
+          <div class="example-item" onclick="loadExample(this)">They was going to the store yesterday.</div>
+          <div class="example-item" onclick="loadExample(this)">I have went to the beach many times.</div>
+          <div class="example-item" onclick="loadExample(this)">The childrens are playing in the park.</div>
+          <div class="example-item" onclick="loadExample(this)">He speak english very good and have many friend.</div>
+        </div>
+        
+        <div class="card">
+          <textarea id="inputText" placeholder="Type your text with grammar errors, or click one of the examples above..."></textarea>
+          <div class="text-info">
+            <span id="charCount">0 characters</span>
+            <span id="wordCount">0 words</span>
+          </div>
+        </div>
+        
+        <div class="button-group">
+          <button id="checkButton" onclick="checkGrammar()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            Check Grammar
+          </button>
+          <button id="clearButton" onclick="clearText()" class="button-secondary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+            Clear Text
+          </button>
+        </div>
+        
+        <div id="statusContainer">
+          <div id="loaderIcon" class="loader hidden"></div>
+          <span id="status" class="status"></span>
+        </div>
+      </div>
+      
+      <div class="output-section">
+        <h2>Corrected Text:</h2>
+        <div id="outputText" class="output-text">
+          <button id="copyButton" class="copy-btn hidden" onclick="copyToClipboard()">Copy</button>
+        </div>
+        
+        <div id="comparisonContainer" class="card hidden">
+          <h2>What Changed:</h2>
+          <div id="diffResult"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="tab-content" id="historyTab">
+    <h2>Your Correction History</h2>
+    <p>Recent grammar corrections are saved here. You can reuse any previous correction.</p>
+    <div id="historyList" class="card">
+      <div class="history-empty">No correction history yet. Start by checking some text.</div>
+    </div>
+  </div>
+  
+  <div class="footer">
+    Enhanced Grammar Checker - Powered by AI | Text corrections are processed in real-time
+  </div>
+
+  <script>
+    // Theme handling
+    const themeToggleBtn = document.getElementById('themeToggle');
+    const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    // Check for saved theme preference or use the system preference
+    const currentTheme = localStorage.getItem('theme') || 
+                         (prefersDarkScheme.matches ? 'dark' : 'light');
+    
+    if (currentTheme === 'dark') {
+      document.body.classList.add('dark-mode');
+      themeToggleBtn.textContent = '☀️';
+    } else {
+      themeToggleBtn.textContent = '🌙';
+    }
+    
+    // Toggle theme
+    themeToggleBtn.addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
+      
+      let theme = 'light';
+      if (document.body.classList.contains('dark-mode')) {
+        theme = 'dark';
+        themeToggleBtn.textContent = '☀️';
+      } else {
+        themeToggleBtn.textContent = '🌙';
+      }
+      
+      localStorage.setItem('theme', theme);
+    });
+    
+    // Tab handling
+    const tabs = document.querySelectorAll('.tab');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        // Remove active class from all tabs and contents
+        tabs.forEach(t => t.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
+        
+        // Add active class to clicked tab and corresponding content
+        const tabName = tab.getAttribute('data-tab');
+        tab.classList.add('active');
+        document.getElementById(`${tabName}Tab`).classList.add('active');
+      });
+    });
+    
+    // Track text metrics
+    const inputText = document.getElementById('inputText');
+    const charCount = document.getElementById('charCount');
+    const wordCount = document.getElementById('wordCount');
+    
+    inputText.addEventListener('input', updateTextMetrics);
+    
+    function updateTextMetrics() {
+      const text = inputText.value;
+      const chars = text.length;
+      const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+      
+      charCount.textContent = `${chars} character${chars !== 1 ? 's' : ''}`;
+      wordCount.textContent = `${words} word${words !== 1 ? 's' : ''}`;
+    }
+    
+    // History management
+    let correctionHistory = JSON.parse(localStorage.getItem('correctionHistory')) || [];
+    const maxHistoryItems = 10;
+    
+    function updateHistoryDisplay() {
+      const historyList = document.getElementById('historyList');
+      
+      if (correctionHistory.length === 0) {
+        historyList.innerHTML = `<div class="history-empty">No correction history yet. Start by checking some text.</div>`;
+        return;
+      }
+      
+      historyList.innerHTML = '';
+      
+      correctionHistory.forEach((item, index) => {
+        const historyItem = document.createElement('div');
+        historyItem.className = 'history-item';
+        
+        const shortOriginal = item.original.length > 50 ? 
+          item.original.substring(0, 50) + '...' : item.original;
+        
+        const shortCorrected = item.corrected.length > 50 ? 
+          item.corrected.substring(0, 50) + '...' : item.corrected;
+        
+        historyItem.innerHTML = `
+          <div class="history-original">Original: "${shortOriginal}"</div>
+          <div class="history-corrected">Corrected: "${shortCorrected}"</div>
+          <div class="history-controls">
+            <button onclick="useHistoryItem(${index})">Use Again</button>
+            <button onclick="removeHistoryItem(${index})" class="button-secondary">Remove</button>
+          </div>
+        `;
+        
+        historyList.appendChild(historyItem);
+      });
+    }
+    
+    function addToHistory(original, corrected) {
+      // Add to beginning of array
+      correctionHistory.unshift({
+        original,
+        corrected,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Keep only the last maxHistoryItems
+      if (correctionHistory.length > maxHistoryItems) {
+        correctionHistory = correctionHistory.slice(0, maxHistoryItems);
+      }
+      
+      // Save to localStorage
+      localStorage.setItem('correctionHistory', JSON.stringify(correctionHistory));
+      
+      // Update display
+      updateHistoryDisplay();
+    }
+    
+    function useHistoryItem(index) {
+      const item = correctionHistory[index];
+      inputText.value = item.original;
+      updateTextMetrics();
+      
+      // Switch to check tab
+      document.querySelector('.tab[data-tab="check"]').click();
+      
+      // Highlight the input
+      inputText.focus();
+    }
+    
+    function removeHistoryItem(index) {
+      correctionHistory.splice(index, 1);
+      localStorage.setItem('correctionHistory', JSON.stringify(correctionHistory));
+      updateHistoryDisplay();
+    }
+    
+    // Copy to clipboard
+    function copyToClipboard() {
+      const outputEl = document.getElementById('outputText');
+      const textToCopy = outputEl.textContent.trim();
+      
+      navigator.clipboard.writeText(textToCopy)
+        .then(() => {
+          const copyBtn = document.getElementById('copyButton');
+          copyBtn.textContent = 'Copied!';
+          
+          setTimeout(() => {
+            copyBtn.textContent = 'Copy';
+          }, 2000);
+        })
+        .catch(err => {
+          console.error('Failed to copy text: ', err);
+        });
+    }
+    
+    // Check if backend is available
+    async function checkBackendStatus() {
+      const statusEl = document.getElementById('status');
+      const loaderEl = document.getElementById('loaderIcon');
+      
+      loaderEl.classList.remove('hidden');
+      statusEl.textContent = 'Connecting to backend...';
+      statusEl.className = 'status';
+      
+      try {
+        const res = await fetch('http://localhost:8001/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: 'Test connection' }),
+          timeout: 5000
+        });
+        
+        if (res.ok) {
+          statusEl.textContent = 'Backend connected successfully';
+          statusEl.className = 'status success';
+          document.getElementById('checkButton').disabled = false;
+          return true;
+        } else {
+          statusEl.textContent = `Backend error: ${res.status} ${res.statusText}`;
+          statusEl.className = 'status error';
+          document.getElementById('checkButton').disabled = true;
+          return false;
+        }
+      } catch (err) {
+        statusEl.textContent = `Cannot connect to backend: ${err.message}. Make sure the server is running at http://localhost:8001`;
+        statusEl.className = 'status error';
+        document.getElementById('checkButton').disabled = true;
+        return false;
+      } finally {
+        loaderEl.classList.add('hidden');
+      }
+    }
+
+    // Load an example into the text area
+    function loadExample(element) {
+      document.getElementById('inputText').value = element.textContent;
+      document.getElementById('outputText').textContent = '';
+      document.getElementById('comparisonContainer').classList.add('hidden');
+      document.getElementById('copyButton').classList.add('hidden');
+      updateTextMetrics();
+    }
+    
+    // Clear the input and output text
+    function clearText() {
+      document.getElementById('inputText').value = '';
+      document.getElementById('outputText').textContent = '';
+      document.getElementById('status').textContent = '';
+      document.getElementById('comparisonContainer').classList.add('hidden');
+      document.getElementById('copyButton').classList.add('hidden');
+      updateTextMetrics();
+    }
+    
+    // Find differences between original and corrected text
+    function findDifferences(original, corrected) {
+      if (!original || !corrected) return '';
+      
+      const diffContainer = document.getElementById('diffResult');
+      diffContainer.innerHTML = '';
+      
+      // Simple diff visualization - highlight changes
+      const words1 = original.split(' ');
+      const words2 = corrected.split(' ');
+      
+      let html = '';
+      let i = 0, j = 0;
+      
+      while (i < words1.length || j < words2.length) {
+        if (i >= words1.length) {
+          // Added words at the end
+          html += `<span class="diff-highlight">${words2.slice(j).join(' ')}</span>`;
+          break;
+        } else if (j >= words2.length) {
+          // Removed words at the end - we don't show these
+          break;
+        } else if (words1[i].toLowerCase() === words2[j].toLowerCase()) {
+          // Same word (ignoring case)
+          html += words2[j] + ' ';
+          i++; j++;
+        } else {
+          // Different word - highlight the correction
+          html += `<span class="diff-highlight">${words2[j]}</span> `;
+          i++; j++;
+        }
+      }
+      
+      diffContainer.innerHTML = html;
+      document.getElementById('comparisonContainer').classList.remove('hidden');
+    }
+
+    async function checkGrammar() {
+      const text = document.getElementById('inputText').value;
+      const outputEl = document.getElementById('outputText');
+      const statusEl = document.getElementById('status');
+      const loaderEl = document.getElementById('loaderIcon');
+      const checkButton = document.getElementById('checkButton');
+      const copyButton = document.getElementById('copyButton');
+      
+      if (!text.trim()) {
+        outputEl.innerHTML = "<span class='error'>Please enter some text</span>";
+        copyButton.classList.add('hidden');
+        return;
+      }
+      
+      // Show loading state
+      statusEl.textContent = 'Checking grammar...';
+      statusEl.className = 'status';
+      loaderEl.classList.remove('hidden');
+      checkButton.disabled = true;
+      copyButton.classList.add('hidden');
+      
+      try {
+        const startTime = new Date().getTime();
+        const res = await fetch('http://localhost:8001/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+        
+        const elapsedTime = ((new Date().getTime() - startTime) / 1000).toFixed(2);
+        
+        if (res.ok) {
+          const data = await res.json();
+          outputEl.textContent = data.corrected_text;
+          statusEl.textContent = `Grammar check complete in ${elapsedTime}s`;
+          statusEl.className = 'status success';
+          
+          // Show copy button
+          copyButton.classList.remove('hidden');
+          
+          // Add to history
+          addToHistory(text, data.corrected_text);
+          
+          // Show diff between original and corrected
+          findDifferences(text, data.corrected_text);
+        } else {
+          outputEl.innerHTML = `<span class='error'>Error: ${res.status} ${res.statusText}</span>`;
+          statusEl.textContent = 'Failed to check grammar';
+          statusEl.className = 'status error';
+        }
+      } catch (err) {
+        outputEl.innerHTML = `<span class='error'>Error: ${err.message}</span>`;
+        statusEl.textContent = 'Failed to connect to backend';
+        statusEl.className = 'status error';
+      } finally {
+        loaderEl.classList.add('hidden');
+        checkButton.disabled = false;
+      }
+    }
+    
+    // Check connection on page load
+    window.onload = function() {
+      checkBackendStatus();
+      document.getElementById('checkButton').disabled = true;
+      updateHistoryDisplay();
+      updateTextMetrics();
+      
+      // Add keyboard shortcut: Ctrl+Enter to check grammar
+      document.getElementById('inputText').addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          document.getElementById('checkButton').click();
+        }
+      });
+    };
+  </script>
+</body>
+</html>
