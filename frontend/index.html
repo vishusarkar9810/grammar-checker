@@ -584,38 +584,80 @@
         });
     }
     
+    // Clear the input and output text
+    function clearText() {
+      // First save any necessary state to localStorage if needed
+      localStorage.setItem('lastCleared', new Date().toISOString());
+      
+      // Perform a complete page refresh
+      window.location.reload();
+    }
+    
+    // Add event listener for text cleared event
+    window.addEventListener('textCleared', function() {
+      // Reset any additional states that might need it
+      const checkButton = document.getElementById('checkButton');
+      checkButton.disabled = true;
+      
+      // Re-enable the button only if there's text and backend is connected
+      const inputText = document.getElementById('inputText');
+      if (inputText.value.trim().length > 0) {
+        checkBackendStatus().then(isConnected => {
+          checkButton.disabled = !isConnected;
+        });
+      }
+    });
+    
+    // Add input event listener to enable/disable check button
+    document.getElementById('inputText').addEventListener('input', function() {
+      const checkButton = document.getElementById('checkButton');
+      const hasText = this.value.trim().length > 0;
+      
+      // Only enable button if we have text AND backend is connected
+      checkBackendStatus().then(isConnected => {
+        checkButton.disabled = !(hasText && isConnected);
+      });
+      
+      updateTextMetrics();
+    });
+    
     // Check if backend is available
     async function checkBackendStatus() {
       const statusEl = document.getElementById('status');
       const loaderEl = document.getElementById('loaderIcon');
+      const checkButton = document.getElementById('checkButton');
       
       loaderEl.classList.remove('hidden');
       statusEl.textContent = 'Connecting to backend...';
       statusEl.className = 'status';
       
       try {
-        const res = await fetch('http://localhost:8001/check', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: 'Test connection' }),
-          timeout: 5000
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const res = await fetch('http://localhost:8001/', {
+          method: 'GET',
+          signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         
         if (res.ok) {
           statusEl.textContent = 'Backend connected successfully';
           statusEl.className = 'status success';
-          document.getElementById('checkButton').disabled = false;
+          checkButton.disabled = !document.getElementById('inputText').value.trim();
           return true;
         } else {
-          statusEl.textContent = `Backend error: ${res.status} ${res.statusText}`;
-          statusEl.className = 'status error';
-          document.getElementById('checkButton').disabled = true;
-          return false;
+          throw new Error(`Backend error: ${res.status} ${res.statusText}`);
         }
       } catch (err) {
-        statusEl.textContent = `Cannot connect to backend: ${err.message}. Make sure the server is running at http://localhost:8001`;
+        if (err.name === 'AbortError') {
+          statusEl.textContent = 'Backend connection timed out. Please try again.';
+        } else {
+          statusEl.textContent = `Cannot connect to backend: ${err.message}. Make sure the server is running at http://localhost:8001`;
+        }
         statusEl.className = 'status error';
-        document.getElementById('checkButton').disabled = true;
+        checkButton.disabled = true;
         return false;
       } finally {
         loaderEl.classList.add('hidden');
@@ -626,16 +668,6 @@
     function loadExample(element) {
       document.getElementById('inputText').value = element.textContent;
       document.getElementById('outputText').textContent = '';
-      document.getElementById('comparisonContainer').classList.add('hidden');
-      document.getElementById('copyButton').classList.add('hidden');
-      updateTextMetrics();
-    }
-    
-    // Clear the input and output text
-    function clearText() {
-      document.getElementById('inputText').value = '';
-      document.getElementById('outputText').textContent = '';
-      document.getElementById('status').textContent = '';
       document.getElementById('comparisonContainer').classList.add('hidden');
       document.getElementById('copyButton').classList.add('hidden');
       updateTextMetrics();
@@ -692,19 +724,42 @@
         return;
       }
       
-      // Show loading state
+      // Reset UI state
+      outputEl.textContent = '';
       statusEl.textContent = 'Checking grammar...';
       statusEl.className = 'status';
       loaderEl.classList.remove('hidden');
       checkButton.disabled = true;
       copyButton.classList.add('hidden');
+      document.getElementById('comparisonContainer').classList.add('hidden');
+      
+      let retryCount = 0;
+      const maxRetries = 3;
+      let success = false;
+      
+      // Create abort controller for the request
+      const controller = new AbortController();
+      window.currentRequest = controller;
       
       try {
+        // First verify backend connection
+        const connectionCheck = await fetch('http://localhost:8001/', {
+          method: 'GET',
+          signal: controller.signal,
+          timeout: 5000
+        });
+        
+        if (!connectionCheck.ok) {
+          throw new Error('Backend connection lost');
+        }
+        
         const startTime = new Date().getTime();
         const res = await fetch('http://localhost:8001/check', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text }),
+          signal: controller.signal,
+          timeout: 10000
         });
         
         const elapsedTime = ((new Date().getTime() - startTime) / 1000).toFixed(2);
@@ -723,16 +778,28 @@
           
           // Show diff between original and corrected
           findDifferences(text, data.corrected_text);
+          
+          success = true;
         } else {
-          outputEl.innerHTML = `<span class='error'>Error: ${res.status} ${res.statusText}</span>`;
-          statusEl.textContent = 'Failed to check grammar';
-          statusEl.className = 'status error';
+          throw new Error(`Server error: ${res.status} ${res.statusText}`);
         }
       } catch (err) {
+        if (err.name === 'AbortError') {
+          // Request was aborted, exit silently
+          return;
+        }
+        
         outputEl.innerHTML = `<span class='error'>Error: ${err.message}</span>`;
-        statusEl.textContent = 'Failed to connect to backend';
+        statusEl.textContent = 'Failed to connect to backend. Please try again.';
         statusEl.className = 'status error';
+        
+        // Try to reconnect to backend
+        await checkBackendStatus();
       } finally {
+        // Clean up
+        window.currentRequest = null;
+        
+        // Always clean up UI state
         loaderEl.classList.add('hidden');
         checkButton.disabled = false;
       }
