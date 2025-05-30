@@ -570,7 +570,7 @@
     function updateHistoryDisplay() {
       const historyList = document.getElementById('historyList');
       
-      if (correctionHistory.length === 0) {
+      if (!correctionHistory || correctionHistory.length === 0) {
         historyList.innerHTML = `<div class="history-empty">No correction history yet. Start by checking some text.</div>`;
         return;
       }
@@ -578,6 +578,8 @@
       historyList.innerHTML = '';
       
       correctionHistory.forEach((item, index) => {
+        if (!item || !item.original || !item.corrected) return;
+        
         const historyItem = document.createElement('div');
         historyItem.className = 'history-item';
         
@@ -753,33 +755,39 @@
       const diffContainer = document.getElementById('diffResult');
       diffContainer.innerHTML = '';
       
-      // Simple diff visualization - highlight changes
+      // Simple diff visualization - highlight only actual changes
       const words1 = original.split(' ');
       const words2 = corrected.split(' ');
       
       let html = '';
       let i = 0, j = 0;
       
-      while (i < words1.length || j < words2.length) {
-        if (i >= words1.length) {
-          // Added words at the end
-          html += `<span class="diff-highlight">${words2.slice(j).join(' ')}</span>`;
-          break;
-        } else if (j >= words2.length) {
-          // Removed words at the end - we don't show these
-          break;
-        } else if (words1[i].toLowerCase() === words2[j].toLowerCase()) {
-          // Same word (ignoring case)
+      while (i < words1.length && j < words2.length) {
+        if (words1[i].toLowerCase() === words2[j].toLowerCase()) {
+          // Same word (ignoring case) - no highlight
           html += words2[j] + ' ';
           i++; j++;
         } else {
-          // Different word - highlight the correction
-          html += `<span class="diff-highlight">${words2[j]}</span> `;
+          // Different word - highlight only if it's actually different
+          const originalWord = words1[i].toLowerCase();
+          const correctedWord = words2[j].toLowerCase();
+          
+          if (originalWord !== correctedWord) {
+            html += `<span class="diff-highlight">${words2[j]}</span> `;
+          } else {
+            html += words2[j] + ' ';
+          }
           i++; j++;
         }
       }
       
-      diffContainer.innerHTML = html;
+      // Handle any remaining words in the corrected text
+      while (j < words2.length) {
+        html += `<span class="diff-highlight">${words2[j]}</span> `;
+        j++;
+      }
+      
+      diffContainer.innerHTML = html.trim();
       document.getElementById('comparisonContainer').classList.remove('hidden');
     }
 
@@ -806,20 +814,10 @@
       copyButton.classList.add('hidden');
       document.getElementById('comparisonContainer').classList.add('hidden');
       
-      let retryCount = 0;
-      const maxRetries = 3;
-      let success = false;
-      
-      // Create abort controller for the request
-      const controller = new AbortController();
-      window.currentRequest = controller;
-      
       try {
         // First verify backend connection
         const connectionCheck = await fetch('http://localhost:8001/', {
-          method: 'GET',
-          signal: controller.signal,
-          timeout: 5000
+          method: 'GET'
         });
         
         if (!connectionCheck.ok) {
@@ -830,49 +828,40 @@
         const res = await fetch('http://localhost:8001/check', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
-          signal: controller.signal,
-          timeout: 10000
+          body: JSON.stringify({ text })
         });
         
         const elapsedTime = ((new Date().getTime() - startTime) / 1000).toFixed(2);
         
-        if (res.ok) {
-          const data = await res.json();
-          outputEl.textContent = data.corrected_text;
-          statusEl.textContent = `Grammar check complete in ${elapsedTime}s`;
-          statusEl.className = 'status success';
-          
-          // Show copy button
-          copyButton.classList.remove('hidden');
-          
-          // Add to history
-          addToHistory(text, data.corrected_text);
-          
-          // Show diff between original and corrected
-          findDifferences(text, data.corrected_text);
-          
-          success = true;
-        } else {
+        if (!res.ok) {
           throw new Error(`Server error: ${res.status} ${res.statusText}`);
         }
-      } catch (err) {
-        if (err.name === 'AbortError') {
-          // Request was aborted, exit silently
-          return;
+        
+        const data = await res.json();
+        
+        if (!data || !data.corrected_text) {
+          throw new Error('Invalid response from server');
         }
         
+        outputEl.textContent = data.corrected_text;
+        statusEl.textContent = `Grammar check complete in ${elapsedTime}s`;
+        statusEl.className = 'status success';
+        
+        // Show copy button
+        copyButton.classList.remove('hidden');
+        
+        // Add to history
+        addToHistory(text, data.corrected_text);
+        
+        // Show diff between original and corrected
+        findDifferences(text, data.corrected_text);
+        
+      } catch (err) {
+        console.error('Error:', err);
         outputEl.innerHTML = `<span class='error'>Error: ${err.message}</span>`;
-        statusEl.textContent = 'Failed to connect to backend. Please try again.';
+        statusEl.textContent = 'Failed to check grammar. Please try again.';
         statusEl.className = 'status error';
-        
-        // Try to reconnect to backend
-        await checkBackendStatus();
       } finally {
-        // Clean up
-        window.currentRequest = null;
-        
-        // Always clean up UI state
         loaderEl.classList.add('hidden');
         checkButton.disabled = false;
       }

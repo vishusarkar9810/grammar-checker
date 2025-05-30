@@ -15,6 +15,10 @@ app.add_middleware(
 class TextRequest(BaseModel):
     text: str
 
+@app.get("/")
+async def health_check():
+    return {"status": "ok"}
+
 @app.post("/check")
 async def check_text(req: TextRequest):
     corrected = correct_text(req.text)

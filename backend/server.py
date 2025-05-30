@@ -31,13 +31,22 @@ async def root():
 @app.post("/check")
 async def check_text(req: TextRequest):
     try:
+        if not req or not req.text:
+            raise HTTPException(status_code=400, detail="No text provided")
+            
         logger.info("Received text for correction")
         # Use the actual grammar correction function
         corrected = correct_text(req.text)
+        
+        if corrected is None:
+            raise HTTPException(status_code=500, detail="Grammar correction failed")
+            
         logger.info("Text correction completed successfully")
-        return {"corrected_text": corrected}
+        return {"corrected_text": corrected if corrected else req.text}
     except Exception as e:
         logger.error(f"Error during text correction: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 # Run the server
